@@ -42,9 +42,9 @@ parseDoc = do
 -- simple parser for math-escaped text
 parseLText :: Parser [LText]
 parseLText = manyTill lTtoken (eof *> pure [])
-  where lTtoken = try  $  Normal <$> (many1  $ noneOf "{}")
-                      <|> Math   <$> (braces $ many1 (noneOf "{}"))
-        braces = between (char '{') (char '}')
+  where lTtoken = try  $  Normal <$> (many1  $ noneOf "#")
+                      <|> Math   <$> (braces $ many1 (noneOf "#"))
+        braces = between (char '#') (char '#')
 
 -- standard test thing for ghci
 ptest :: Show a => Parser a -> String -> IO ()
@@ -61,16 +61,6 @@ emitDoc (Doc title author bullets) = title' ++ author' ++ bullets'
         author'  = printf "\\author{%s}" author
         bullets' = concatMap emitLT finalB
         finalB = map lTextofBullet $ {- collapse  -} bullets
-        {-
-        collapse :: [Bullet] -> [Bullet]
-        collapse [] = []
-        collapse ls@((n,_):_) = let (y,no) = getUntil (\(x,_) -> x == n) ls in
-                                  (n,concatMap snd y):(collapse no)
-          where getUntil :: (a -> Bool) -> [a] -> ([a],[a])
-                getUntil p' (hd:tl) = let (a,b) = getUntil p' tl in
-                                          if (p' hd) then (hd:a,b) else (a,hd:b)
-                getUntil _ [] = ([],[])
-        -}
         emitLT :: (Int,[LText]) -> String
         emitLT (n,lts) = concatMap id (replicate n "\n\\begin{itemize}\\n") ++ lts' 
                          ++  concatMap id (replicate n "\n\\end{itemize}")
