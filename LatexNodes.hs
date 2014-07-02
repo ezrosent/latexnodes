@@ -2,10 +2,8 @@
 module LatexNodes where
 
 import Text.ParserCombinators.Parsec
-import Text.Parsec.Combinator
 import Control.Applicative hiding ((<|>), optional, many)
 import Text.Printf (printf)
-import qualified Data.List.Split as S
 
 -- TODO: - parse to LText directly (see between combinator)
 --       - decide on bullets, delimiters for
@@ -62,7 +60,8 @@ emitDoc (Doc title author bullets) = title' ++ author' ++ bullets'
   where title'   = printf "\\title{%s}" title
         author'  = printf "\\author{%s}" author
         bullets' = concatMap emitLT finalB
-        finalB = map lTextofBullet $ collapse bullets
+        finalB = map lTextofBullet $ {- collapse  -} bullets
+        {-
         collapse :: [Bullet] -> [Bullet]
         collapse [] = []
         collapse ls@((n,_):_) = let (y,no) = getUntil (\(x,_) -> x == n) ls in
@@ -71,12 +70,13 @@ emitDoc (Doc title author bullets) = title' ++ author' ++ bullets'
                 getUntil p' (hd:tl) = let (a,b) = getUntil p' tl in
                                           if (p' hd) then (hd:a,b) else (a,hd:b)
                 getUntil _ [] = ([],[])
+        -}
         emitLT :: (Int,[LText]) -> String
-        emitLT (n,lts) = concatMap id (replicate n "\n\\begin{itemize}") ++ lts' 
+        emitLT (n,lts) = concatMap id (replicate n "\n\\begin{itemize}\\n") ++ lts' 
                          ++  concatMap id (replicate n "\n\\end{itemize}")
           where lts' = concatMap stringOfLText lts
         lTextofBullet :: Bullet -> (Int,[LText])
         lTextofBullet (n,tex) = (n,rightOf $ parse parseLText "" tex)
         rightOf = \case
-                     Right a -> a
+                     Right a -> Normal "\\item " : a
                      Left err -> error  $ "some sort of parse error happened" ++ show err

@@ -12,4 +12,5 @@ main = print $ stringDoc ("TITLE: Test\n"
                                   ++ "AUTHOR: Yo There\n"
                                   ++ "\t\t\t- hello\n"
                                   ++ "\t- {there}\n"
+                                  ++ "\t- {there}\n"
                                   ++ "\t\t- sir\n")
