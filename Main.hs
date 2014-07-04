@@ -1,8 +1,8 @@
 module Main where
 import LatexNodes (parseDoc,emitDoc,varDecs)
-import Text.ParserCombinators.Parsec
-import Control.Applicative
+import Text.ParserCombinators.Parsec (parse)
 import Text.Printf (printf)
+import Control.Applicative
 import System.Environment
 
 doIO :: String -> String -> String -> IO ()
