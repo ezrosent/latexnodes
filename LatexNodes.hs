@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase,TupleSections,DeriveFunctor #-}
+{-# LANGUAGE ExistentialQuantification,GADTs,LambdaCase,TupleSections,DeriveFunctor #-}
 module LatexNodes where
 import Text.ParserCombinators.Parsec
 import Control.Applicative hiding ((<|>), optional, many)
@@ -6,9 +6,65 @@ import Text.Printf (printf)
 
 type Bullet = (Int,String) -- (level -> content)
 
--- individual tokens of LateX text
 data LText = Normal String | Math String | DMath String | IText String
   deriving (Eq,Show)
+-- BEGIN: GADT tests
+data LT a where
+  Norm :: String      -> LT String
+  Mat  :: [LT String] -> LT [LT String]
+  DMat :: [LT String] -> LT [LT String]
+  ITex :: String      -> LT String
+data DLT where
+  DLT :: forall a. LT a -> DLT
+
+
+parseLTs :: Parser (LT String)
+parseLTs =  (try $ (Norm <$> (many1 $ noneOf "#~"))
+            <|> (ITex <$> bt "~" (many1 $ noneOf "#~")))
+
+parseLTm :: Parser (LT [LT String])
+parseLTm = (try (ltp DMat "##") <|> (ltp Mat "#")) 
+  where ltp c s = c <$> (bt s $ many parseLTs )
+
+stringOfLT :: LT a -> String
+stringOfLT = \case Norm s -> s
+                   ITex s -> s
+                   Mat  l -> printf "\\( %s \\)" $ concatMap stringOfLT l
+                   DMat l -> printf "\\[ %s \\]" $ concatMap stringOfLT l
+
+parseLT :: Parser [DLT]
+parseLT = manyTill parseAll (eof *> pure [])
+  where parseAll = try (DLT <$> parseLTs) <|> (DLT <$> parseLTs)
+
+stringOfDLT :: DLT -> String
+stringOfDLT (DLT a) = stringOfLT a
+
+
+
+--END: GADT tests
+-- flexible type definition for parsing, makes it more extensible later
+-- on if not all LTexts are strings
+data LParse where
+  LP :: forall a. (a -> LText) -> Parser a -> LParse 
+bt :: String -> Parser a -> Parser a
+bt b s = string b *> s <* string b
+-- definitions of LaTeX tokens
+pList :: [LParse]
+pList = [
+  LP Normal (many1 $ noneOf "#~"),
+  LP DMath  (bt "##" $ many1 (noneOf "#")),
+  LP Math   (bt "#" $ many1 (noneOf "#")),
+  LP IText  (bt "~" $ many1 (noneOf "#~"))
+  ]
+
+parseLP :: [LParse] -> Parser [LText]
+parseLP [] = pure []
+parseLP (x:xs) = manyTill (lToken $  map token' xs) (eof *> pure [])
+  where token' (LP f p) = f <$> p
+        lToken = foldl (\ a b  -> (try a) <|> b) $ token' x
+
+parseLText :: Parser [LText]
+parseLText = parseLP pList
 
 -- raw document format (title,author,content)
 data Doc = Doc String String [Bullet]
@@ -18,8 +74,8 @@ parseHead :: String -> Parser String
 parseHead hd = string hd *> many (noneOf "\n")
 
 parseBull :: Char -> Parser Bullet
-parseBull b = ( , ) <$> (ntabs 0 <* char b) <*> manyTill (noneOf [])
-                    (lookAhead $ try (many1 (char '\t') <* char b )<|> eof *> string "" )
+parseBull b = ( , ) <$> (ntabs 0 <* char b) <*> manyTill anyChar --(noneOf [])
+              (lookAhead $ try (many1 (char '\t') <* char b )<|> eof *> string "" )
   where ntabs n = try (char '\t' *> ntabs (n+1)) <|> pure n
 
 parseDoc :: Parser Doc
@@ -27,16 +83,6 @@ parseDoc = Doc <$> (parseHead "TITLE:" <* string "\n")
                <*> (parseHead "AUTHOR:" <* string "\n")
                <*> (manyTill (parseBull '-') (eof *> pure []))
 
--- simple parser for math-escaped text
-parseLText :: Parser [LText]
-parseLText = manyTill lTtoken (eof *> pure [])
-  where lTtoken = try $ Normal <$> (many1   $ noneOf "#~")
-              <|> try  (DMath  <$> (dbraces $ many1 (noneOf "#")))
-              <|> try  (Math   <$> (braces  $ many1 (noneOf "#")))
-              <|>      (IText  <$> (itbraces $ many1 (noneOf "~")))
-        itbraces s = (string "~") *> s <* (string "~")
-        dbraces s = string "##" *> s <* string "##"
-        braces    = between (char '#') (char '#')
 
 --- end parsing section
 stringOfLText :: LText -> String
