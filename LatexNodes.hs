@@ -14,6 +14,9 @@ data LT a where
   Mat  :: [LT String] -> LT [LT String]
   DMat :: [LT String] -> LT [LT String]
   ITex :: String      -> LT String
+
+-- needed an existential wrapper to get this all to work
+-- need to read more on haskell GADTs
 data DLT where
   DLT :: forall a. LT a -> DLT
 
@@ -34,12 +37,26 @@ stringOfLT = \case Norm s -> s
 
 parseLT :: Parser [DLT]
 parseLT = manyTill parseAll (eof *> pure [])
-  where parseAll = try (DLT <$> parseLTs) <|> (DLT <$> parseLTs)
+  where parseAll = try (DLT <$> parseLTs) <|> (DLT <$> parseLTm)
 
 stringOfDLT :: DLT -> String
 stringOfDLT (DLT a) = stringOfLT a
 
+injectLTs :: LT String -> LText
+injectLTs = \case
+               Norm s -> Normal s
+               ITex s -> IText s
+injectLTm :: LT [LT String] -> LText
+injectLTm = \case
+               Mat  l  -> Math  $ concatMap stringOfLT l
+               DMat l  -> DMath $ concatMap stringOfLT l
 
+injectLT :: LT a -> LText
+injectLT = \case
+              Norm s  -> Normal s
+              ITex s  -> IText s
+              Mat  l  -> Math  $ concatMap stringOfLT l
+              DMat l  -> DMath $ concatMap stringOfLT l
 
 --END: GADT tests
 -- flexible type definition for parsing, makes it more extensible later
@@ -49,12 +66,17 @@ data LParse where
 bt :: String -> Parser a -> Parser a
 bt b s = string b *> s <* string b
 -- definitions of LaTeX tokens
-pList :: [LParse]
-pList = [
+pList' :: [LParse]
+pList' = [
   LP Normal (many1 $ noneOf "#~"),
   LP DMath  (bt "##" $ many1 (noneOf "#")),
   LP Math   (bt "#" $ many1 (noneOf "#")),
   LP IText  (bt "~" $ many1 (noneOf "#~"))
+  ]
+pList :: [LParse]
+pList = [
+  LP injectLTs parseLTs,
+  LP injectLTm parseLTm
   ]
 
 parseLP :: [LParse] -> Parser [LText]
