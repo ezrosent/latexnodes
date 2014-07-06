@@ -1,92 +1,43 @@
-{-# LANGUAGE ExistentialQuantification,GADTs,LambdaCase,TupleSections,DeriveFunctor #-}
+{-# LANGUAGE LambdaCase,TupleSections,DeriveFunctor #-}
 module LatexNodes where
 import Text.ParserCombinators.Parsec
+import System.Process
 import Control.Applicative hiding ((<|>), optional, many)
 import Text.Printf (printf)
 
 type Bullet = (Int,String) -- (level -> content)
 
+-- definitions of LaTeX tokens
 data LText = Normal String | Math String | DMath String | IText String
-  deriving (Eq,Show)
--- BEGIN: GADT tests
-data LT a where
-  Norm :: String      -> LT String
-  Mat  :: [LT String] -> LT [LT String]
-  DMat :: [LT String] -> LT [LT String]
-  ITex :: String      -> LT String
+  | IShell String [String]
+  deriving (Eq, Show)
 
--- needed an existential wrapper to get this all to work
--- need to read more on haskell GADTs
-data DLT where
-  DLT :: forall a. LT a -> DLT
+--- end parsing section
+stringOfLText :: LText -> IO String
+stringOfLText = \case Math s   -> return $ "\\(" ++ s ++ "\\)"
+                      DMath s  -> return $ "\\[" ++ s ++ "\\]"
+                      IText s  -> return $ "\\textit{" ++ s ++ "}"
+                      Normal s -> return s
+                      IShell s ls -> readProcess s ls "" >>=
+                                     (\ r -> return $ "\\begin{verbatim}" ++ r
+                                     ++ "\\end{verbatim}")
 
-
-parseLTs :: Parser (LT String)
-parseLTs =  (try $ (Norm <$> (many1 $ noneOf "#~"))
-            <|> (ITex <$> bt "~" (many1 $ noneOf "#~")))
-
-parseLTm :: Parser (LT [LT String])
-parseLTm = (try (ltp DMat "##") <|> (ltp Mat "#")) 
-  where ltp c s = c <$> (bt s $ many parseLTs )
-
-stringOfLT :: LT a -> String
-stringOfLT = \case Norm s -> s
-                   ITex s -> s
-                   Mat  l -> printf "\\( %s \\)" $ concatMap stringOfLT l
-                   DMat l -> printf "\\[ %s \\]" $ concatMap stringOfLT l
-
-parseLT :: Parser [DLT]
-parseLT = manyTill parseAll (eof *> pure [])
-  where parseAll = try (DLT <$> parseLTs) <|> (DLT <$> parseLTm)
-
-stringOfDLT :: DLT -> String
-stringOfDLT (DLT a) = stringOfLT a
-
-injectLTs :: LT String -> LText
-injectLTs = \case
-               Norm s -> Normal s
-               ITex s -> IText s
-injectLTm :: LT [LT String] -> LText
-injectLTm = \case
-               Mat  l  -> Math  $ concatMap stringOfLT l
-               DMat l  -> DMath $ concatMap stringOfLT l
-
-injectLT :: LT a -> LText
-injectLT = \case
-              Norm s  -> Normal s
-              ITex s  -> IText s
-              Mat  l  -> Math  $ concatMap stringOfLT l
-              DMat l  -> DMath $ concatMap stringOfLT l
-
---END: GADT tests
 -- flexible type definition for parsing, makes it more extensible later
 -- on if not all LTexts are strings
-data LParse where
-  LP :: forall a. (a -> LText) -> Parser a -> LParse 
+
 bt :: String -> Parser a -> Parser a
 bt b s = string b *> s <* string b
--- definitions of LaTeX tokens
-pList' :: [LParse]
-pList' = [
-  LP Normal (many1 $ noneOf "#~"),
-  LP DMath  (bt "##" $ many1 (noneOf "#")),
-  LP Math   (bt "#" $ many1 (noneOf "#")),
-  LP IText  (bt "~" $ many1 (noneOf "#~"))
-  ]
-pList :: [LParse]
-pList = [
-  LP injectLTs parseLTs,
-  LP injectLTm parseLTm
-  ]
-
-parseLP :: [LParse] -> Parser [LText]
-parseLP [] = pure []
-parseLP (x:xs) = manyTill (lToken $  map token' xs) (eof *> pure [])
-  where token' (LP f p) = f <$> p
-        lToken = foldl (\ a b  -> (try a) <|> b) $ token' x
+lexeme :: Parser a -> Parser a
+lexeme p = (many $ oneOf  " \t\n\r") *> p <* (many $ oneOf " \t\n\r")
 
 parseLText :: Parser [LText]
-parseLText = parseLP pList
+parseLText = manyTill (try $ Normal <$> (many1 $ noneOf "#~")
+          <|> try ( IShell <$>  (string "###" *> (lexeme $ many1 (noneOf " #\t\n\r")))
+                    <*>  lexeme ( try $ many (try $ many1 $ lexeme (noneOf " \t\n\r#"))
+                             <|> pure []) <* string "###")
+          <|> try ( DMath <$> (bt "##" $ many1 (noneOf "#")))
+          <|> try ( Math <$> (bt "#" $ many1 (noneOf "#")))
+          <|> IText <$> (bt "~" $ many1 (noneOf "#~"))) (eof *> pure [])
 
 -- raw document format (title,author,content)
 data Doc = Doc String String [Bullet]
@@ -97,21 +48,13 @@ parseHead hd = string hd *> many (noneOf "\n")
 
 parseBull :: Char -> Parser Bullet
 parseBull b = ( , ) <$> (ntabs 0 <* char b) <*> manyTill anyChar --(noneOf [])
-              (lookAhead $ try (many1 (char '\t') <* char b )<|> eof *> string "" )
+              (lookAhead $ try (many1 (char '\t') <* char b ) <|> eof *> string "" )
   where ntabs n = try (char '\t' *> ntabs (n+1)) <|> pure n
 
 parseDoc :: Parser Doc
-parseDoc = Doc <$> (parseHead "TITLE:" <* string "\n")
+parseDoc = Doc <$> (parseHead "TITLE:"  <* string "\n")
                <*> (parseHead "AUTHOR:" <* string "\n")
                <*> (manyTill (parseBull '-') (eof *> pure []))
-
-
---- end parsing section
-stringOfLText :: LText -> String
-stringOfLText = \case Math s   -> printf "\\( %s \\)" s
-                      DMath s  -> printf "\\[ %s \\]" s
-                      IText s  -> printf "\\textit{%s}" s
-                      Normal s -> s
 
 -- decalre header-specific variables based on title and author
 -- TODO: don't hardcode author/title variables
@@ -121,14 +64,14 @@ varDecs (Doc title author _) = printf "\\newcommand{\\mytitle}{%s}\
 
 -- emit laTex from a document
 -- TODO: have it return either rather than ad-hoc error throwing
-emitDoc :: Doc -> String
-emitDoc (Doc title author bullets) = printf "%s\n%s\n\\begin{document}\
-  \ \n \\maketitle\n%s\n\\end{document}" title' author'  bullets'
-  where title'   = (printf "\\title{%s}" title)   :: String
-        author'  = (printf "\\author{%s}" author) :: String
-        bullets' = emitBullet $ map lTextofBullet bullets
-        emitBullet = emitBT True . conv
-        lTextofBullet :: Bullet -> (Int,[LText])
+emitDoc :: Doc -> IO String
+emitDoc (Doc title author bullets) = do
+  title' <- return  $ printf "\\title{%s}" title
+  author' <- return $ printf "\\author{%s}" author
+  bullets' <-  (emitBT True . conv) $ map lTextofBullet bullets
+  return $ title' ++ "\n" ++ author' ++ "\n\\begin{document}\n\\maketitle\n" 
+                  ++ bullets' ++ "\n\\end{document}"
+  where lTextofBullet :: Bullet -> (Int,[LText])
         lTextofBullet (n,tex) = (n,rightOf $ parse parseLText "" tex)
         rightOf = \case Right a  -> Normal "\\item " : a
                         Left err -> error  $ "some sort of parse error happened" ++ show err
@@ -140,7 +83,7 @@ data  BT a = Node [a] (Maybe (BT a)) (Maybe (BT a))
   deriving (Eq,Show,Functor)
 
 -- convert an assoc-list into a BT,
--- the assoc-list has the semantics of 'Indentation Levels'
+-- the assoc-list has the semantics of 'Indentation Levels' for bullets
 conv :: Eq a => [(Int,a)] -> BT a
 conv = \case
   []           -> Node [] Nothing Nothing
@@ -155,9 +98,12 @@ conv = \case
 
 -- convert BT [LText] to well-itemized Latex;
 -- Boolean flag indicates whether or not to begin with a \begin{itemize}
-emitBT :: Bool ->  BT [LText] -> String
-emitBT b (Node ls next cont)  = printf "\
-\%s%s%s%s"   (if b then "\\begin{itemize}\n" else "") bullets children continue
-  where bullets  = concatMap (concatMap stringOfLText) ls
-        children = case next of {Nothing -> ""; Just s -> emitBT True s}
-        continue = case cont of {Nothing -> "\\end{itemize}\n"; Just s -> emitBT False s}
+emitBT :: Bool -> BT [LText] -> IO String
+emitBT b (Node ls next cont) = do
+  bullets  <- concatM2 stringOfLText ls
+  children <- case next of {Nothing -> return ""; Just s -> emitBT True s}
+  continue <- case cont of {Nothing -> return "\\end{itemize}\n"; Just s -> emitBT False s}
+  return $ (if b then "\\begin{itemize}\n" else "") ++ bullets ++ children ++ continue
+  where concatM2 :: (LText -> IO String) -> [[LText]] -> IO String
+        concatM2 f lls = (mapM (mapM f) lls)
+          >>= (\ x -> return $ (concat . concat) x)
