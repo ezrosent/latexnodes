@@ -4,23 +4,25 @@ import Text.ParserCombinators.Parsec
 import System.Process
 import Control.Applicative hiding ((<|>), optional, many)
 import Text.Printf (printf)
+import Control.Parallel.Strategies
+import Control.DeepSeq
 
 type Bullet = (Int,String) -- (level -> content)
 
 -- definitions of LaTeX tokens
-data LText = Normal String | Math String | DMath String | IText String
+data LText = Normal String | Bold String | Underline String | IText String
   | IShell String [String]
   deriving (Eq, Show)
 
---- end parsing section
+instance NFData LText
+
 stringOfLText :: LText -> IO String
-stringOfLText = \case Math s   -> return $ "\\(" ++ s ++ "\\)"
-                      DMath s  -> return $ "\\[" ++ s ++ "\\]"
-                      IText s  -> return $ "\\textit{" ++ s ++ "}"
-                      Normal s -> return s
-                      IShell s ls -> readProcess s ls "" >>=
-                                     (\ r -> return $ "\\begin{verbatim}" ++ r
-                                     ++ "\\end{verbatim}")
+stringOfLText = \case Bold s       -> return $ "\\textbf{" ++ s ++ "}"
+                      Underline s  -> return $ "\\underline{" ++ s ++ "}"
+                      IText s      -> return $ "\\textit{" ++ s ++ "}"
+                      Normal s     -> return s
+                      IShell s ls  -> readProcess s ls "" >>=
+                        (\ r -> return $ "\\begin{verbatim}" ++ r ++ "\\end{verbatim}")
 
 -- flexible type definition for parsing, makes it more extensible later
 -- on if not all LTexts are strings
@@ -32,11 +34,11 @@ lexeme p = (many $ oneOf  " \t\n\r") *> p <* (many $ oneOf " \t\n\r")
 
 parseLText :: Parser [LText]
 parseLText = manyTill (try $ Normal <$> (many1 $ noneOf "#~")
-          <|> try ( IShell <$>  (string "###" *> (lexeme $ many1 (noneOf " #\t\n\r")))
-                    <*>  lexeme ( try $ many (try $ many1 $ lexeme (noneOf " \t\n\r#"))
-                             <|> pure []) <* string "###")
-          <|> try ( DMath <$> (bt "##" $ many1 (noneOf "#")))
-          <|> try ( Math <$> (bt "#" $ many1 (noneOf "#")))
+          <|> try (IShell <$>  (string "###" *> (lexeme $ many1 (noneOf " #\t\n\r")))
+                    <*>  many (lexeme (try (many1 $ oneOf " \n\t\r") -- whitespace-separated args
+                                  <|> (many1 $ noneOf " \n\t\r#"))) <* string "###")
+          <|> try (Underline <$> (bt "##" $ many1 (noneOf "#")))
+          <|> try (Bold      <$> (bt "#"  $ many1 (noneOf "#")))
           <|> IText <$> (bt "~" $ many1 (noneOf "#~"))) (eof *> pure [])
 
 -- raw document format (title,author,content)
@@ -66,9 +68,9 @@ varDecs (Doc title author _) = printf "\\newcommand{\\mytitle}{%s}\
 -- TODO: have it return either rather than ad-hoc error throwing
 emitDoc :: Doc -> IO String
 emitDoc (Doc title author bullets) = do
-  title' <- return  $ printf "\\title{%s}" title
-  author' <- return $ printf "\\author{%s}" author
-  bullets' <-  (emitBT True . conv) $ map lTextofBullet bullets
+  title'    <- return  $ printf "\\title{%s}" title
+  author'   <- return $ printf "\\author{%s}" author
+  bullets'  <- (emitBT True . conv) $ map lTextofBullet bullets
   return $ title' ++ "\n" ++ author' ++ "\n\\begin{document}\n\\maketitle\n" 
                   ++ bullets' ++ "\n\\end{document}"
   where lTextofBullet :: Bullet -> (Int,[LText])
@@ -84,17 +86,24 @@ data  BT a = Node [a] (Maybe (BT a)) (Maybe (BT a))
 
 -- convert an assoc-list into a BT,
 -- the assoc-list has the semantics of 'Indentation Levels' for bullets
-conv :: Eq a => [(Int,a)] -> BT a
+-- TODO: parallelize recursive calls, straightforward method does not
+-- work
+conv :: (Eq a,NFData a) => [(Int,a)] -> BT a
 conv = \case
   []           -> Node [] Nothing Nothing
   xs@((n,_):_) -> Node (map snd curr)
       (if (child == []) || (fst $ head child) < n
          then Nothing else Just $ conv child)
       (if (next == []) then Nothing else Just $ conv next)
-    where (curr,child,next) = split3 ((== n).fst) xs
-          split3 f ls = (takeWhile f ls,takeWhile (not.f) mid,end)
-            where mid = dropWhile f ls
-                  end = dropWhile (not.f) mid
+    where (curr,child,next) = split3' ((== n).fst) xs
+          split3' f ls = runEval $ do
+                          mid' <- rpar $ force (dropWhile f ls)
+                          a'   <- rpar $ force (takeWhile f ls)
+                          rseq mid'
+                          b'   <- rpar $ force (takeWhile (not.f) mid')
+                          c'   <- rpar $ force (dropWhile (not.f) mid')
+                          rseq a'; rseq b'; rseq c';
+                          return (a',b',c')
 
 -- convert BT [LText] to well-itemized Latex;
 -- Boolean flag indicates whether or not to begin with a \begin{itemize}
@@ -107,3 +116,4 @@ emitBT b (Node ls next cont) = do
   where concatM2 :: (LText -> IO String) -> [[LText]] -> IO String
         concatM2 f lls = (mapM (mapM f) lls)
           >>= (\ x -> return $ (concat . concat) x)
+
