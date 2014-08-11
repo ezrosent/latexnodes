@@ -1,5 +1,6 @@
 module Main where
-import LatexNodes (parseDoc,emitDoc,varDecs)
+import LatexNodes (emitDoc,varDecs)
+import Parser (parseDoc)
 import Text.ParserCombinators.Parsec (parse)
 import Text.Printf (printf)
 import System.Environment
