@@ -12,9 +12,9 @@ doIO proLF texF outFile = do
   txt'  <- case parse parseDoc "" txt of
              Left e -> error $ "illegal parse:\n" ++ show e
              Right d -> return d
-  h     <- return $  varDecs txt'
   t     <- emitDoc txt'
-  writeFile outFile (printf "%s\n%s\n%s\n" h p t)
+  let h = varDecs txt' in
+      writeFile outFile (printf "%s\n%s\n%s\n" h p t)
 
 -- TODO: sane and helpful command-line arg stuff
 main :: IO ()
