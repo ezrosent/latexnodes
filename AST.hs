@@ -12,7 +12,7 @@ data LText = Normal String | Bold String | Underline String | IText String
   deriving (Eq, Show)
 instance NFData LText
 
-
+-- Overall document: Title, Author, doc elements, bullets
 data Doc = Doc String String [([DocElts],[Bullet])]
   deriving (Eq,Show)
 
@@ -23,5 +23,16 @@ data DocElts = Section String
 -- intermediate data structure to hold bullets
 -- it has [list of bullets], optional children, optional continuation
 -- of bullets at same level after children, so It's a binary tree
+--  so if we have:
+--         a.
+--            b.
+--            c.
+--         d.
+--           e.
+--             f.
+--         g.
+-- A -> (b, c),(d->(e->f),g)
+-- Where lone letters with no arrows after them are None
+-- (same goes for letters pointing to only 1, rather than 2 children)
 data  BT a = Node [a] (Maybe (BT a)) (Maybe (BT a))
   deriving (Eq,Show)
