@@ -1,0 +1,59 @@
+TITLE:Example Document
+AUTHOR:Example Author
+Section:Section
+Lorem ipsum dolor sit amet, no inimicus electram mei, nobis numquam vel
+eu. Qui stet quidam officiis te. Eum legere impedit dignissim ex. Mea
+accumsan ponderum ut, in pri phaedrum disputationi. At mea melius
+aliquid volutpat. Errem simul oratio at cum, mel invenire electram
+accommodare ea.
+
+	-Vix tantas molestie laboramus ne, et pro scripta regione laoreet. Ad
+	 nusquam percipitur repudiandae est. Pri eu justo vocent, meis accusamus
+	 in vim. 
+		-Et placerat gubergren vel, ea cum scaevola forensibus
+     comprehensam. 
+			-Mei eu purto definitionem, fugit tation everti ne mel,
+			 dico stet adhuc cum ei.
+		-No wisi iisque vis.
+
+Sub:Subsection
+~Te tritani euismod vis,~ ne mea vero adhuc. ##Ad altera regione appareat
+sed. Nihil insolens hendrerit cu nam.## Meliore invidunt et per. #Doming
+diceret ius at, fierent consetetur ei mei.#
+
+###echo this is an inline shell command###
+
+#v##echo and this is inline shell inside of a verbatim block###
+
+Subsub:Subsubsection
+#!center[
+This text is inside a \verb+center+ block]
+#code[c][
+//hello world in c
+#include<stdio.h>
+int main(int argc, char **argv){
+  printf("Hello World!\n");
+  return 0;
+}
+]
+
+	- To convert this, compile the haskell code:
+		#!verbatim[
+cd ..
+ghc -O2 -threaded -rtsopts *.hs -o test.out
+]
+	- Then, take a ``header file'' with the necessary declarations (sample
+		provided in header.tex) and give the binary header notes output
+#!verbatim[
+./test.out header.tex example.txt out.tex]
+		- custom header files should keep in mind that latexnodes will place
+			declarations for the \verb+myauthor+ and \verb+mytitle+ variables
+			at the top of the document as per their definitions in the text.
+		- You should have pygments installed in order for code samples to
+			work
+		- For longer blocks of bullets, consider allowing for more threads
+      to execute the code by adding \verb|+RTS -N4| or equivalent to the
+      command line
+	- Compile the output file:
+#!verbatim[
+pdflatex -shell-escape out.tex]

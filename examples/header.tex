@@ -1,0 +1,30 @@
+%this is a sample header file for the latexnodes system
+%some of this template is adapted from the homework template found here:
+%http://theory.stanford.edu/~tim/f13/template.tex
+\documentclass{article}
+\usepackage{graphicx,datetime,fancyhdr,amsmath,amssymb,amsthm,subfig,url,hyperref}
+\usepackage{enumitem,titling,minted,float}
+\usepackage[margin=1in]{geometry}
+\setlistdepth{9}
+\setlist[itemize,1]{label=$\bullet$}
+\setlist[itemize,2]{label=$\circ$}
+\setlist[itemize,3]{label=$-$}
+\setlist[itemize,4]{label=$*$}
+\setlist[itemize,5]{label=$\to$}
+\setlist[itemize,6]{label=$\mapsto$}
+\setlist[itemize,7]{label=$\bullet$}
+\setlist[itemize,8]{label=$\bullet$}
+\setlist[itemize,9]{label=$\bullet$}
+\renewlist{itemize}{itemize}{9}
+\setlength{\parindent}{0pt}
+\renewcommand{\theenumi}{\bf \Alph{enumi}}
+\fancypagestyle{plain}{}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LO,RE]{\sffamily\bfseries\large \mytitle}
+\fancyhead[RO,LE]{\sffamily\bfseries\large \myauthor}
+\fancyfoot[RO,LE]{\sffamily\bfseries\thepage}
+\renewcommand{\headrulewidth}{1pt}
+\renewcommand{\footrulewidth}{1pt}
+\graphicspath{{figures/}}
+\setlength{\droptitle}{-1cm}
