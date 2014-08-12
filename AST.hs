@@ -31,7 +31,7 @@ data DocElts = Section String
 --           e.
 --             f.
 --         g.
--- A -> (b, c),(d->(e->f),g)
+-- A -> (b -> c),(d->(e->f),g)
 -- Where lone letters with no arrows after them are None
 -- (same goes for letters pointing to only 1, rather than 2 children)
 data  BT a = Node [a] (Maybe (BT a)) (Maybe (BT a))
